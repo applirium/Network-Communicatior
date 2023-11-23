@@ -4,7 +4,7 @@ import time
 import binascii
 import struct
 
-FLAGS = {"SWITCH": 128, "FIN": 64, "KEEP": 32, "FILE": 16, "TXT": 8, "ERROR": 4, "ACK": 2, "INIT": 1}
+FLAGS = {"FIN": 32, "KEEP": 16, "DATA": 8, "ERROR": 4, "ACK": 2, "INIT": 1}
 
 
 class Sender:
@@ -13,8 +13,8 @@ class Sender:
             try:
                 self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 if switch is None:
-                    self.ip = input("Sender IP: ")  # "127.0.0.1"
-                    self.port = int(input("Sender port: "))  # 42069
+                    self.ip = "127.0.0.1"  # input("Sender IP: ")
+                    self.port = 42069      # int(input("Sender port: "))
                 else:
                     self.ip = switch[0]
                     self.port = switch[1]
@@ -23,7 +23,7 @@ class Sender:
 
                 message, self.receiver = self.sock.recvfrom(1024)
 
-                init_command = flag_check(message, ["INIT", "ACK"], ["FILE", "TXT"])
+                init_command = flag_check(message, ["INIT", "ACK"], ["DATA"])
 
                 if init_command is not None:
                     print(f"Client: Connection successfully established with server! {self.receiver[0]}:{self.receiver[1]}")
@@ -55,29 +55,20 @@ class Sender:
                     print(f"Client: Disconnected from server")
                     return None
 
-            elif action == "text":
-                self.sock.sendto(info_messages(["TXT", "INIT"]), self.receiver)
+            elif action == "file" or action == "text":
+                self.sock.sendto(info_messages(["DATA", "INIT"]), self.receiver)
                 data = self.sock.recv(1024)
 
-                text_command = flag_check(data, ["TXT", "INIT", "ACK"])
+                data_command = flag_check(data, ["DATA", "INIT", "ACK"])
 
-                if text_command is not None:
-                    print(f"Client: Sending text")
-
-            elif action == "file":
-                self.sock.sendto(info_messages(["FILE", "INIT"]), self.receiver)
-                data = self.sock.recv(1024)
-
-                file_command = flag_check(data, ["FILE", "INIT", "ACK"])
-
-                if file_command is not None:
-                    print(f"Client: Sending file")
+                if data_command is not None:
+                    print(f"Client: Sending something")
 
             elif action == "switch":
-                self.sock.sendto(info_messages(["SWITCH"]), self.receiver)
+                self.sock.sendto(info_messages(["INIT", "FIN"]), self.receiver)
                 data = self.sock.recv(1024)
 
-                end_command = flag_check(data, ["SWITCH", "ACK"])
+                end_command = flag_check(data, ["INIT", "FIN", "ACK"])
 
                 if end_command is not None:
                     self.thread_status = False
@@ -93,6 +84,8 @@ class Sender:
                 print("Client: Invalid input")
 
     def keep_alive(self):
+        not_responding = 0
+
         while self.thread_status:
             try:
                 self.sock.settimeout(5)
@@ -104,11 +97,17 @@ class Sender:
 
                 if keep_request is not None:
                     print(f"Client: I am alive!")
+                    not_responding = 0
                     time.sleep(5)
 
             except (TimeoutError, ConnectionResetError):
-                print(f"Client: Connection was interrupted, press end to terminate program! ")
-                return None
+                not_responding += 1
+                if not_responding < 4:
+                    print(f"Client: Server is not responding! ")
+                    time.sleep(5)
+                else:
+                    print(f"Client: Connection was interrupted, press end to terminate program! ")
+                    return None
 
 
 class Receiver:
@@ -117,13 +116,14 @@ class Receiver:
 
         if switch is None:
             self.ip = "127.0.0.1"  # socket.gethostbyname(socket.gethostname)
-            self.port = int(input("Insert port number: "))  # 42069
+            self.port = 42069  # int(input("Insert port number: "))
             self.sock.bind((self.ip, self.port))
         else:
             self.ip = "127.0.0.1"  # socket.gethostbyname(socket.gethostname)
             self.port = switch[1]
             self.sock.bind(switch)
 
+        self.connected = False
         self.sender = None
 
         print(f"Server: Server is up and running, listening to port {self.port}")
@@ -138,31 +138,31 @@ class Receiver:
 
                 message, self.sender = self.sock.recvfrom(1024)
 
-                init_request = flag_check(message, ["INIT"], ["FILE", "TXT"])
+                init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
                 keep_request = flag_check(message, ["KEEP"])
-                file_request = flag_check(message, ["FILE", "INIT"], ["FIN"])
-                txt_request = flag_check(message, ["TXT", "INIT"], ["FIN"])
-                switch_request = flag_check(message, ["SWITCH"])
-                end_request = flag_check(message, ["FIN"])
+                data_request = flag_check(message, ["DATA", "INIT"], ["FIN", "ACK"])
+                switch_request = flag_check(message, ["INIT", "FIN"])
+                end_request = flag_check(message, ["FIN"], ["INIT", "DATA", "ACK"])
 
                 if init_request is not None:
                     self.sock.sendto(info_messages(["INIT", "ACK"]), self.sender)
+                    self.connected = True
                     print(f"Server: Connection with client was successfully established! {self.sender[0]}:{self.sender[1]}")
 
                 elif keep_request is not None:
+                    if self.connected is False:
+                        print(f"Server: Connection with client was successfully reestablished! {self.sender[0]}:{self.sender[1]}")
+                        self.connected = True
+
                     self.sock.sendto(info_messages(["KEEP", "ACK"]), self.sender)
                     print(f"Server: Client is alive! ")
 
-                elif file_request is not None:
-                    self.sock.sendto(info_messages(["FILE", "INIT", "ACK"]), self.sender)
-                    print(f"Server: Client is sending file! ")
-
-                elif txt_request is not None:
-                    self.sock.sendto(info_messages(["TXT", "INIT", "ACK"]), self.sender)
-                    print(f"Server: Client is sending text! ")
+                elif data_request is not None:
+                    self.sock.sendto(info_messages(["DATA", "INIT", "ACK"]), self.sender)
+                    print(f"Server: Client is sending something! ")
 
                 elif switch_request is not None:
-                    self.sock.sendto(info_messages(["SWITCH", "ACK"]), self.sender)
+                    self.sock.sendto(info_messages(["INIT", "FIN", "ACK"]), self.sender)
                     print(f"Server: Switching with client! ")
                     self.sock.close()
                     return tuple((self.ip, self.port))
@@ -173,6 +173,7 @@ class Receiver:
                     self.sender = None
 
             except TimeoutError:
+                self.sock.close()
                 print("Server: Server connection timed out")
                 return None
 
