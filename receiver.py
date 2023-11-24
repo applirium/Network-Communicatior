@@ -1,5 +1,7 @@
 import socket
-from common import flag_check, info_messages
+from common import flag_check, packet_construct
+import struct
+import binascii
 
 
 class Receiver:
@@ -21,6 +23,11 @@ class Receiver:
         print(f"Server: Server is up and running, listening to port {self.port}")
 
     def listen(self):
+        file_name = ""
+        data = []
+        success = 0
+        fail = 0
+
         while True:
             try:
                 if self.sender is None:
@@ -30,14 +37,16 @@ class Receiver:
 
                 message, self.sender = self.sock.recvfrom(1024)
 
-                init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
-                keep_request = flag_check(message, ["KEEP"])
-                data_request = flag_check(message, ["DATA", "INIT"], ["FIN", "ACK"])
-                switch_request = flag_check(message, ["INIT", "FIN"])
-                end_request = flag_check(message, ["FIN"], ["INIT", "DATA", "ACK"])
+                _, init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
+                _, keep_request = flag_check(message, ["KEEP"])
+                _, data_init_request = flag_check(message, ["DATA", "INIT"], ["FIN", "ACK"])
+                seq_data, data_transition_request = flag_check(message, ["DATA"], ["INIT", "FIN", "ACK"])
+                _, data_end_request = flag_check(message, ["DATA", "FIN"], ["INIT", "ACK"])
+                _, switch_request = flag_check(message, ["INIT", "FIN"])
+                _, end_request = flag_check(message, ["FIN"], ["INIT", "DATA", "ACK"])
 
                 if init_request is not None:
-                    self.sock.sendto(info_messages(["INIT", "ACK"]), self.sender)
+                    self.sock.sendto(packet_construct(["INIT", "ACK"]), self.sender)
                     self.connected = True
                     print(f"Server: Connection with client was successfully established! {self.sender[0]}:{self.sender[1]}")
 
@@ -46,21 +55,54 @@ class Receiver:
                         print(f"Server: Connection with client was successfully reestablished! {self.sender[0]}:{self.sender[1]}")
                         self.connected = True
 
-                    self.sock.sendto(info_messages(["KEEP", "ACK"]), self.sender)
+                    self.sock.sendto(packet_construct(["KEEP", "ACK"]), self.sender)
                     print(f"Server: Client is alive! ")
 
-                elif data_request is not None:
-                    self.sock.sendto(info_messages(["DATA", "INIT", "ACK"]), self.sender)
-                    print(f"Server: Client is sending something! ")
+                elif data_init_request is not None:
+                    file_name = data_init_request
+                    self.sock.sendto(packet_construct(["DATA", "INIT", "ACK"]), self.sender)
+
+                elif data_transition_request is not None:
+                    _, _, rec_crc = struct.unpack("!BHH", message[0:5])
+                    if rec_crc == binascii.crc_hqx(bytes(data_transition_request, encoding="utf-8"), 0):
+                        self.sock.sendto(packet_construct(["DATA", "ACK"], sequence_number=seq_data), self.sender)
+
+                        if file_name == "":
+                            print(f"Server: Text fragment {seq_data + 1} was received successfully: {data_transition_request}")
+                            data.append(data_transition_request)
+                        else:
+                            print(f"Server: File fragment {seq_data + 1} was received successfully: {data_transition_request}")
+                        success += 1
+
+                    else:
+                        self.sock.sendto(packet_construct(["DATA", "ACK", "ERROR"], sequence_number=seq_data), self.sender)
+                        fail += 1
+
+                elif data_end_request is not None:
+                    self.sock.sendto(packet_construct(["DATA", "FIN", "ACK"]), self.sender)
+
+                    if file_name == "":
+                        try:
+                            final_message = "".join(data)
+                        except TypeError:
+                            final_message = data
+
+                        print(f"Server: Client sent message: {final_message} Total fragments: {success} Fragments retransmitted: {fail}")
+                    else:
+                        print(f"Server: Client sent file: {file_name} Total fragments: {success} Fragments retransmitted: {fail}")
+
+                    data = []
+                    success = 0
+                    fail = 0
 
                 elif switch_request is not None:
-                    self.sock.sendto(info_messages(["INIT", "FIN", "ACK"]), self.sender)
+                    self.sock.sendto(packet_construct(["INIT", "FIN", "ACK"]), self.sender)
                     print(f"Server: Switching with client! ")
                     self.sock.close()
                     return tuple((self.ip, self.port))
 
                 elif end_request is not None:
-                    self.sock.sendto(info_messages(["FIN", "ACK"]), self.sender)
+                    self.sock.sendto(packet_construct(["FIN", "ACK"]), self.sender)
                     print(f"Server: Client disconnected from server")
                     self.sender = None
 

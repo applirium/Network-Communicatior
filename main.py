@@ -3,8 +3,7 @@ from receiver import Receiver
 from sender import Sender
 
 
-# TODO posielanie sprav
-# TODO error making
+# TODO posielanie suborov
 # TODO public ip testing
 
 
