@@ -1,7 +1,9 @@
+import os.path
 import socket
-from common import flag_check, packet_construct
+from common import flag_check, packet_construct, MAX_FRAGMENT
 import struct
 import binascii
+import time
 
 
 class Receiver:
@@ -25,8 +27,11 @@ class Receiver:
     def listen(self):
         file_name = ""
         data = []
+        fragment_position = []
+
         success = 0
         fail = 0
+        start_time = 0
 
         while True:
             try:
@@ -35,7 +40,7 @@ class Receiver:
                 else:
                     self.sock.settimeout(None)
 
-                message, self.sender = self.sock.recvfrom(1024)
+                message, self.sender = self.sock.recvfrom(MAX_FRAGMENT)
 
                 _, init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
                 _, keep_request = flag_check(message, ["KEEP"])
@@ -52,28 +57,32 @@ class Receiver:
 
                 elif keep_request is not None:
                     if self.connected is False:
-                        print(f"Server: Connection with client was successfully reestablished! {self.sender[0]}:{self.sender[1]}")
                         self.connected = True
+                        print(f"Server: Connection with client was successfully reestablished! {self.sender[0]}:{self.sender[1]}")
 
                     self.sock.sendto(packet_construct(["KEEP", "ACK"]), self.sender)
                     print(f"Server: Client is alive! ")
 
                 elif data_init_request is not None:
-                    file_name = data_init_request
+                    file_name = str(data_init_request, encoding="utf-8")
                     self.sock.sendto(packet_construct(["DATA", "INIT", "ACK"]), self.sender)
 
                 elif data_transition_request is not None:
+                    if start_time == 0:
+                        start_time = time.time()
+
                     _, _, rec_crc = struct.unpack("!BHH", message[0:5])
-                    if rec_crc == binascii.crc_hqx(bytes(data_transition_request, encoding="utf-8"), 0):
+                    if rec_crc == binascii.crc_hqx(data_transition_request, 0):
                         self.sock.sendto(packet_construct(["DATA", "ACK"], sequence_number=seq_data), self.sender)
 
-                        if file_name == "":
-                            print(f"Server: Text fragment {seq_data + 1} was received successfully: {data_transition_request}")
-                            data.append(data_transition_request)
-                        else:
-                            print(f"Server: File fragment {seq_data + 1} was received successfully: {data_transition_request}")
-                        success += 1
+                        if file_name == '':
+                            data_transition_request = str(data_transition_request, encoding='utf-8')
 
+                        print(f"Server: {'Text' if file_name == '' else 'File'} fragment {seq_data + 1} was received successfully: {data_transition_request}")
+
+                        data.append(data_transition_request)
+                        fragment_position.append(seq_data + 1)
+                        success += 1
                     else:
                         self.sock.sendto(packet_construct(["DATA", "ACK", "ERROR"], sequence_number=seq_data), self.sender)
                         fail += 1
@@ -81,17 +90,32 @@ class Receiver:
                 elif data_end_request is not None:
                     self.sock.sendto(packet_construct(["DATA", "FIN", "ACK"]), self.sender)
 
-                    if file_name == "":
-                        try:
-                            final_message = "".join(data)
-                        except TypeError:
-                            final_message = data
+                    pair = sorted(list(zip(fragment_position, data)), key=lambda x: x[0])
+                    _, num = zip(*pair)
+                    stop_time = time.time()
 
-                        print(f"Server: Client sent message: {final_message} Total fragments: {success} Fragments retransmitted: {fail}")
+                    if file_name == "":
+                        final_message = "".join(num)
+
+                        print(f"Server: Client sent message: {final_message}")
+                        print(f"Server: Total fragments: {success} Fragments retransmitted: {fail} Time of transmission: {round(stop_time - start_time,3)} s")
                     else:
-                        print(f"Server: Client sent file: {file_name} Total fragments: {success} Fragments retransmitted: {fail}")
+                        index = 1
+                        while os.path.exists(file_name):
+                            if index == 1:
+                                file_name = file_name.replace(".", f"({index}).", 1)
+                            else:
+                                file_name = file_name.replace(f"({index-1}).", f"({index}).", 1)
+                            index += 1
+
+                        with open(file_name, 'wb') as file:
+                            file.writelines(num)
+
+                        print(f"Server: Client sent file: {file_name} \nTotal fragments: {success} Fragments retransmitted: {fail} Time of transmission: {stop_time - start_time} s")
 
                     data = []
+                    fragment_position = []
+                    start_time = 0
                     success = 0
                     fail = 0
 

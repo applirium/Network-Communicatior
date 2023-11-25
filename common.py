@@ -16,7 +16,7 @@ def flag_creation(*args):
 def packet_construct(flag, sequence_number=0, data=b"", error=False):
     flags = flag_creation(*flag)
     if error:
-        header = struct.pack("!BHH", flags, sequence_number, binascii.crc_hqx(data + b'xD', 0))
+        header = struct.pack("!BHH", flags, sequence_number, binascii.crc_hqx(data + b'pks :(', 0))
     else:
         header = struct.pack("!BHH", flags, sequence_number, binascii.crc_hqx(data, 0))
     return header + data
@@ -36,7 +36,7 @@ def flag_check(message, flag, nflag=()):
     flags = flag_decode(int(flag_code))
 
     if all(pos_flag in flags for pos_flag in flag) and all(neg_flag not in flags for neg_flag in nflag):
-        return seq, str(message[5:], encoding="utf-8")
+        return seq, message[5:]
     else:
         return None, None
 
@@ -52,7 +52,12 @@ def fragment_size_check(size):
 
 def mistake_rate_check():
     while True:
-        mistake_rate = float(input("Client: Percentage of mistake packet simulation: ")) / 100
+        try:
+            mistake_rate = float(input("Client: Percentage of mistake packet simulation: ")) / 100
+        except ValueError:
+            print(f"Client: Insert integer value")
+            continue
+
         if 0 <= mistake_rate <= 1:
             return mistake_rate
         else:
