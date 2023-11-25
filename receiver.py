@@ -1,6 +1,6 @@
 import os.path
 import socket
-from common import flag_check, packet_construct, MAX_FRAGMENT
+from common import flag_check, packet_construct, MAX_FRAGMENT, HEADER_SIZE
 import struct
 import binascii
 import time
@@ -12,7 +12,7 @@ class Receiver:
 
         if switch is None:
             self.ip = "127.0.0.1"  # socket.gethostbyname(socket.gethostname)
-            self.port = 42069  # int(input("Insert port number: "))
+            self.port = int(input("Insert port number: "))  # 42069
             self.sock.bind((self.ip, self.port))
         else:
             self.ip = "127.0.0.1"  # socket.gethostbyname(socket.gethostname)
@@ -32,6 +32,7 @@ class Receiver:
         success = 0
         fail = 0
         start_time = 0
+        size = 0
 
         while True:
             try:
@@ -40,7 +41,7 @@ class Receiver:
                 else:
                     self.sock.settimeout(None)
 
-                message, self.sender = self.sock.recvfrom(MAX_FRAGMENT)
+                message, self.sender = self.sock.recvfrom(MAX_FRAGMENT + HEADER_SIZE)
 
                 _, init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
                 _, keep_request = flag_check(message, ["KEEP"])
@@ -64,7 +65,10 @@ class Receiver:
                     print(f"Server: Client is alive! ")
 
                 elif data_init_request is not None:
-                    file_name = str(data_init_request, encoding="utf-8")
+                    string = str(data_init_request, encoding="utf-8")
+                    file_name, size = string.split(",")
+                    size = int(size)
+
                     self.sock.sendto(packet_construct(["DATA", "INIT", "ACK"]), self.sender)
 
                 elif data_transition_request is not None:
@@ -96,9 +100,8 @@ class Receiver:
 
                     if file_name == "":
                         final_message = "".join(num)
-
                         print(f"Server: Client sent message: {final_message}")
-                        print(f"Server: Total fragments: {success} Fragments retransmitted: {fail} Time of transmission: {round(stop_time - start_time,3)} s")
+
                     else:
                         index = 1
                         while os.path.exists(file_name):
@@ -111,7 +114,12 @@ class Receiver:
                         with open(file_name, 'wb') as file:
                             file.writelines(num)
 
-                        print(f"Server: Client sent file: {file_name} \nTotal fragments: {success} Fragments retransmitted: {fail} Time of transmission: {stop_time - start_time} s")
+                        print(f"Server: Client sent file: {file_name}")
+
+                    transmission_time = stop_time - start_time
+
+                    print(f"Total fragments: {success} Fragments retransmitted: {fail}")
+                    print(f"Time of transmission: {round(transmission_time,3)} s Speed of transmission: {round(size / (transmission_time * 1000000),3)} MB/s")
 
                     data = []
                     fragment_position = []

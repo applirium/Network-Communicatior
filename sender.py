@@ -13,8 +13,8 @@ class Sender:
             try:
                 self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 if switch is None:
-                    self.ip = "127.0.0.1"  # input("Sender IP: ")
-                    self.port = 42069      # int(input("Sender port: "))
+                    self.ip = input("Sender IP: ")  # "127.0.0.1"
+                    self.port = int(input("Sender port: "))  # 42069
                 else:
                     self.ip = switch[0]
                     self.port = switch[1]
@@ -62,20 +62,28 @@ class Sender:
                 buffed_file = b""
                 message = ""
                 buffer_sent = []
+                message_split = []
+                file_split = []
 
                 self.keep_console = False
 
                 if action == "file":
+                    print("Client: Max file size = 96 MB")
                     while True:
                         try:
-                            path = input("Client: Set name of a file: ")
+                            path = input("Client: Set name of a file : ")
                             absolute_path = os.path.abspath(path)
                             size = os.path.getsize(path)
+
+                            if size > 96141312:
+                                print(f"Client: Over the maximum file size limit: {round(size / 1000000,3)}")
+                                continue
+
                             file = open(absolute_path, "rb")
                             buffed_file = file.read()
                             file.close()
 
-                            print(f"Client: File: {path} Size: {size} B Absolute path: {absolute_path}")
+                            print(f"Client: File: {path} Size: {round(size / 1000000,3)} MB Absolute path: {absolute_path}")
                             break
 
                         except FileNotFoundError:
@@ -100,7 +108,7 @@ class Sender:
                 buffer = list(range(packet_transfer))
                 mistake_rate = mistake_rate_check()
 
-                self.sock.sendto(packet_construct(["DATA", "INIT"], data=bytes(path, encoding="utf-8")), self.receiver)
+                self.sock.sendto(packet_construct(["DATA", "INIT"], data=bytes(f"{path},{size}", encoding="utf-8")), self.receiver)
                 data = self.sock.recv(MAX_FRAGMENT)
 
                 _, data_init_command = flag_check(data, ["DATA", "INIT", "ACK"])
@@ -109,6 +117,11 @@ class Sender:
                     self.thread_status = False
                     self.thread.join()
 
+                    if path == "":
+                        message_split = [message[i:i + fragment_size] for i in range(0, len(message), fragment_size)]
+                    else:
+                        file_split = [buffed_file[i:i + fragment_size] for i in range(0, len(buffed_file), fragment_size)]
+
                 while len(buffer) > 0 or len(buffer_sent) > 0:
                     while len(buffer_sent) < window_size and len(buffer) > 0:
                         fragment_size = min(size, fragment_size)
@@ -116,9 +129,9 @@ class Sender:
                         error_flag = random.random() < mistake_rate
 
                         if path == "":
-                            data_to_send = bytes(message[fragment_size * buffer[0]: fragment_size * (buffer[0] + 1)], encoding='utf-8')
+                            data_to_send = bytes(message_split[buffer[0]], encoding='utf-8')
                         else:
-                            data_to_send = buffed_file[fragment_size * buffer[0]: fragment_size * (buffer[0] + 1)]
+                            data_to_send = file_split[buffer[0]]
 
                         packet_to_send = packet_construct(["DATA"], sequence_number=buffer[0], data=data_to_send, error=error_flag)
 
@@ -131,18 +144,15 @@ class Sender:
                     seq_err, data_transfer_error = flag_check(data, ["DATA", "ACK", "ERROR"], ["INIT", "FIN"])
 
                     if data_transfer_command is not None:
-                        transfer_type = "Text" if path == "" else "File"
-                        print(f"Client: {transfer_type} fragment {seq_res + 1} size: {fragment_size} B was sent successfully!")
-
-                        size -= fragment_size
                         buffer_sent.remove(seq_res)
+
+                        print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_res + 1} size: {size % fragment_size if seq_res + 1 == packet_transfer else fragment_size} B was sent successfully!")
 
                     if data_transfer_error is not None:
                         seq_to_remove = buffer_sent.index(seq_err)
                         buffer.insert(0, buffer_sent.pop(seq_to_remove))
 
-                        transfer_type = "Text" if path == "" else "File"
-                        print(f"Client: {transfer_type} fragment {seq_err + 1} size: {fragment_size} B was fractured!")
+                        print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_err + 1} size: {size % fragment_size if seq_err+ 1 == packet_transfer else fragment_size} B was fractured!")
 
                 self.sock.sendto(packet_construct(["DATA", "FIN"]), self.receiver)
                 data = self.sock.recv(MAX_FRAGMENT)
