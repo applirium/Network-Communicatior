@@ -9,15 +9,14 @@ import time
 class Receiver:
     def __init__(self, switch=None):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
         if switch is None:
-            self.ip = "127.0.0.1"  # socket.gethostbyname(socket.gethostname)
+            self.ip = socket.gethostbyname(socket.gethostname())  # "127.0.0.1"
             self.port = int(input("Insert port number: "))  # 42069
             self.sock.bind((self.ip, self.port))
         else:
-            self.ip = "127.0.0.1"  # socket.gethostbyname(socket.gethostname)
+            self.ip = socket.gethostbyname(socket.gethostname())  # "127.0.0.1"
             self.port = switch[1]
-            self.sock.bind(switch)
+            self.sock.bind((self.ip, self.port))
 
         self.connected = False
         self.sender = None
@@ -118,20 +117,24 @@ class Receiver:
 
                     transmission_time = stop_time - start_time
 
-                    print(f"Total fragments: {success} Fragments retransmitted: {fail}")
-                    print(f"Time of transmission: {round(transmission_time,3)} s Speed of transmission: {round(size / (transmission_time * 1000000),3)} MB/s")
+                    print(f"Server: Total fragments: {success} Fragments retransmitted: {fail}")
 
-                    data = []
-                    fragment_position = []
-                    start_time = 0
-                    success = 0
-                    fail = 0
+                    try:
+                        print(f"Server: Time of transmission: {round(transmission_time,5)} s Speed of transmission: {round(size / (transmission_time * 2**20),5)} MB/s")
+                    except ZeroDivisionError:
+                        continue
+                    finally:
+                        data = []
+                        fragment_position = []
+                        start_time = 0
+                        success = 0
+                        fail = 0
 
                 elif switch_request is not None:
                     self.sock.sendto(packet_construct(["INIT", "FIN", "ACK"]), self.sender)
                     print(f"Server: Switching with client! ")
                     self.sock.close()
-                    return tuple((self.ip, self.port))
+                    return tuple((self.ip, self.port))      # TODO vyriesit vymenu IP
 
                 elif end_request is not None:
                     self.sock.sendto(packet_construct(["FIN", "ACK"]), self.sender)

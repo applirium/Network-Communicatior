@@ -21,28 +21,27 @@ class Sender:
 
                 self.sock.sendto(packet_construct(["INIT"]), (self.ip, self.port))
 
+                self.sock.settimeout(5)
                 message, self.receiver = self.sock.recvfrom(MAX_FRAGMENT)
 
                 _, init_command = flag_check(message, ["INIT", "ACK"], ["DATA"])
 
                 if init_command is not None:
                     print(f"Client: Connection successfully established with server! {self.receiver[0]}:{self.receiver[1]}")
-                    print("Client: Actions Client: Disconnect | Switch | Text | File | Help")
 
                 self.thread_status = True
-                self.keep_console = True
 
                 self.thread = threading.Thread(target=self.keep_alive)
                 self.thread.daemon = True
                 self.thread.start()
                 break
 
-            except ConnectionResetError:
-                print(f"Client: Server is not running")
+            except (ConnectionResetError, TimeoutError):
+                print(f"Client: Server is not responding")
 
     def request(self):
         while True:
-            action = input().lower()
+            action = input("Client: Actions Client: Disconnect | Switch | Text | File: ").lower()
 
             if action == "disconnect":
                 self.sock.sendto(packet_construct(["FIN"]), self.receiver)
@@ -65,10 +64,8 @@ class Sender:
                 message_split = []
                 file_split = []
 
-                self.keep_console = False
-
                 if action == "file":
-                    print("Client: Max file size = 96 MB")
+                    print("Client: Max file size = 91.69 MB")
                     while True:
                         try:
                             path = input("Client: Set name of a file : ")
@@ -76,14 +73,14 @@ class Sender:
                             size = os.path.getsize(path)
 
                             if size > 96141312:
-                                print(f"Client: Over the maximum file size limit: {round(size / 1000000,3)}")
+                                print(f"Client: Over the maximum file size limit: {round(size / 2**20,3)}")
                                 continue
 
                             file = open(absolute_path, "rb")
                             buffed_file = file.read()
                             file.close()
 
-                            print(f"Client: File: {path} Size: {round(size / 1000000,3)} MB Absolute path: {absolute_path}")
+                            print(f"Client: File: {path} Size: {round(size / 2**20,3)} MB Absolute path: {absolute_path}")
                             break
 
                         except FileNotFoundError:
@@ -143,16 +140,20 @@ class Sender:
                     seq_res, data_transfer_command = flag_check(data, ["DATA", "ACK"], ["INIT", "FIN", "ERROR"])
                     seq_err, data_transfer_error = flag_check(data, ["DATA", "ACK", "ERROR"], ["INIT", "FIN"])
 
+                    reminder = size % fragment_size
+                    if reminder == 0:
+                        reminder = fragment_size
+
                     if data_transfer_command is not None:
                         buffer_sent.remove(seq_res)
 
-                        print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_res + 1} size: {size % fragment_size if seq_res + 1 == packet_transfer else fragment_size} B was sent successfully!")
+                        print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_res + 1} size: {reminder if seq_res + 1 == packet_transfer else fragment_size} B was sent successfully!")
 
                     if data_transfer_error is not None:
                         seq_to_remove = buffer_sent.index(seq_err)
                         buffer.insert(0, buffer_sent.pop(seq_to_remove))
 
-                        print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_err + 1} size: {size % fragment_size if seq_err+ 1 == packet_transfer else fragment_size} B was fractured!")
+                        print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_err + 1} size: {reminder if seq_err + 1 == packet_transfer else fragment_size} B was fractured!")
 
                 self.sock.sendto(packet_construct(["DATA", "FIN"]), self.receiver)
                 data = self.sock.recv(MAX_FRAGMENT)
@@ -161,7 +162,6 @@ class Sender:
 
                 if data_end_command is not None:
                     self.thread_status = True
-                    self.keep_console = True
 
                     self.thread = threading.Thread(target=self.keep_alive)
                     self.thread.daemon = True
@@ -200,9 +200,6 @@ class Sender:
                 _, keep_request = flag_check(data, ["KEEP", "ACK"])
 
                 if keep_request is not None:
-                    if self.keep_console:
-                        print(f"Client: I am alive!")
-
                     not_responding = 0
                     time.sleep(5)
 

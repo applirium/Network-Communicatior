@@ -2,8 +2,7 @@ import time
 from receiver import Receiver
 from sender import Sender
 
-# TODO stracanie bajtov
-# TODO public ip testing
+# TODO vyriesit vymenu suboru po odpojeni kabla
 
 while True:
     msg = input("Client (1) Server (2) End of program (3): ")
