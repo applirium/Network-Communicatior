@@ -2,8 +2,6 @@ import time
 from receiver import Receiver
 from sender import Sender
 
-# TODO prerusenie a nadviazanie spoejnia
-
 while True:
     msg = input("Client (1) Server (2) End of program (3): ")
     if msg == "3":
