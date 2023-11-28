@@ -2,7 +2,7 @@ import math
 import random
 import socket
 import threading
-from common import flag_check, packet_construct, fragment_size_check, mistake_rate_check, MAX_FRAGMENT
+from common import flag_check, packet_construct, fragment_size_check, rounder, mistake_rate_check, MAX_FRAGMENT, MAX_FRAMES
 import time
 import os
 
@@ -63,44 +63,57 @@ class Sender:
                 buffer_sent = []                                                    # Initialize buffer for sent fragments
                 message_split = []                                                  # Initialize list to hold split message fragments
                 file_split = []                                                     # Initialize list to hold split file fragments
+                packet_transfer = 0                                                 # Initialize packet transfer count
 
                 if action == "file":                                                # Handle sending file
-                    print("Client: Max file size = 91.69 MB")
                     while True:
                         try:
+                            fragment_size = fragment_size_check()                   # Determine fragment size for the text
+                            max_file_size, ending = rounder(fragment_size * MAX_FRAMES)
+                            print(f"Client: Max file size = {max_file_size} {ending}")
+
                             path = input("Client: Set name of a file : ")
                             absolute_path = os.path.abspath(path)
                             size = os.path.getsize(path)
 
-                            if size > 96141312:                                     # Check file size limit
-                                print(f"Client: Over the maximum file size limit: {round(size / 2**20,3)}")
+                            current_file_size, current_ending = rounder(size)
+                            if size > fragment_size * MAX_FRAMES:                        # Check file size limit
+                                print(f"Client: File size {current_file_size} {current_ending} is over the maximum file size limit: {max_file_size} {ending}")
                                 continue
 
                             file = open(absolute_path, "rb")                        # Read file content into buffed_file
                             buffed_file = file.read()
                             file.close()
 
-                            # Display file details
-                            print(f"Client: File: {path} Size: {round(size / 2**20,3)} MB Absolute path: {absolute_path}")
+                            packet_transfer = math.ceil(size / fragment_size)                            # Calculate total packets to send
+                            print(f"Client: File: {path} Size: {current_file_size} {current_ending}")    # Display file details
+                            print(f"Client: Absolute path: {absolute_path}")
+                            print(f"Client: Sending {packet_transfer} packets!")
                             break
 
                         except FileNotFoundError:
                             print("Client: File not found")
 
-                    fragment_size = fragment_size_check(size)                       # Determine fragment size for the file
-                    packet_transfer = math.ceil(size / fragment_size)               # Calculate total packets to send
+                else:                                                                  # Handle sending text
+                    while True:
+                        fragment_size = fragment_size_check()                          # Determine fragment size for the text
+                        max_text_size, ending = rounder(fragment_size * MAX_FRAMES)
+                        print(f"Client: Max message size = {max_text_size} {ending}")
 
-                    print(f"Client: Sending {packet_transfer} packets!")
+                        path = ""
+                        message = input("Client: Input message to send: ")              # Get text input from user
+                        size = len(message)
 
-                else:                                                               # Handle sending text
-                    path = ""
-                    message = input("Client: Input message to send: ")              # Get text input from user
-                    size = len(message)
-                    fragment_size = fragment_size_check(size)                       # Determine fragment size for the text
-                    packet_transfer = math.ceil(size / fragment_size)               # Calculate total packets to send
+                        current_text_size, current_ending = rounder(size)
+                        if size > fragment_size * MAX_FRAMES:                                # Check file size limit
+                            print(f"Client: File size {current_text_size} {current_ending} is over the maximum file size limit: {max_text_size} {ending}")
+                            continue
 
-                    print(f"Client: Message: {message} Size: {size} B")
-                    print(f"Client: Sending {packet_transfer} packets!")
+                        packet_transfer = math.ceil(size / fragment_size)               # Calculate total packets to send
+                        print(f"Client: Message: {message}")
+                        print(f"Client: Size: {current_text_size} {current_ending}")
+                        print(f"Client: Sending {packet_transfer} packets!")
+                        break
 
                 window_size = min(4, packet_transfer)                               # Set window size for sending fragments
                 buffer = list(range(packet_transfer))                               # Initialize buffer for unsent fragments
@@ -198,11 +211,10 @@ class Sender:
 
     def keep_alive(self):                                                           # Method for the keep alive mechanism
         not_responding = 0
+        self.sock.settimeout(5)
 
         while self.thread_status:                                                   # While the thread status is True (indicating the thread is active)
             try:
-                self.sock.settimeout(5)
-
                 self.sock.sendto(packet_construct(["KEEP"]), self.receiver)         # Send a KEEP packet to check server response
                 data = self.sock.recv(MAX_FRAGMENT)
 

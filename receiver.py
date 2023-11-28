@@ -1,7 +1,6 @@
 import os.path
 import socket
-from common import flag_check, packet_construct, MAX_FRAGMENT, HEADER_SIZE
-import struct
+from common import flag_check, packet_construct, rounder, extract_bits_from_header, MAX_FRAGMENT, HEADER_SIZE
 import binascii
 import time
 
@@ -21,7 +20,7 @@ class Receiver:
         self.connected = False                                                   # Flag to indicate connection status
         self.sender = None                                                       # Variable to store sender's address
 
-        print(f"Server: Server is up and running, listening to port {self.port}")
+        print(f"Server: Server is up and running, listening on {self.ip}:{self.port}")
 
     def listen(self):                                                           # Function handling server listening and it's answering to clients requests
         file_name = ""                                                          # Initialization of variables used in the listening loop
@@ -76,7 +75,7 @@ class Receiver:
                     if start_time == 0:
                         start_time = time.time()
 
-                    _, _, rec_crc = struct.unpack("!BHH", message[0:5])
+                    _, _, rec_crc = extract_bits_from_header(message[0:5])
                     if rec_crc == binascii.crc_hqx(data_transition_request, 0):               # If CRC matches, acknowledge receipt of data fragment
                         self.sock.sendto(packet_construct(["DATA", "ACK"], sequence_number=seq_data), self.sender)
 
@@ -123,7 +122,8 @@ class Receiver:
                     print(f"Server: Total fragments: {success} Fragments retransmitted: {fail}")
 
                     try:
-                        print(f"Server: Time of transmission: {round(transmission_time,5)} s Speed of transmission: {round(size / (transmission_time * 2**20),5)} MB/s")
+                        speed, ending = rounder(size / transmission_time)
+                        print(f"Server: Time of transmission: {round(transmission_time,5)} s Speed of transmission: {speed} {ending}/s")
                     except ZeroDivisionError:
                         continue
                     finally:                                                # Reset variables for next transmission
