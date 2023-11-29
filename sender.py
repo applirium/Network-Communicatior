@@ -36,7 +36,7 @@ class Sender:
                 self.thread.start()
                 break
 
-            except (ConnectionResetError, TimeoutError):
+            except (ConnectionResetError, TimeoutError):                             # Handling unexpected client disconnection and client connection to not working servers
                 print(f"Client: Server is not responding")
 
     def request(self):
@@ -149,7 +149,7 @@ class Sender:
                         packet_to_send = packet_construct(["DATA"], sequence_number=buffer[0], data=data_to_send, error=error_flag)
 
                         self.sock.sendto(packet_to_send, self.receiver)             # Send the packet to the receiver and move the fragment from buffer to buffer_sent
-                        buffer_sent.append(buffer.pop(0))
+                        buffer_sent.append(buffer.pop(0))                           # Move the fragment from buffer to buffer_sent
 
                     try:
                         data = self.sock.recv(MAX_FRAGMENT)

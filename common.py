@@ -13,14 +13,14 @@ def flag_creation(*args):                                                       
     return flag_sum
 
 
-def create_header(bit_6, bit_18, bit_16):
+def create_header(bit_6, bit_18, bit_16):                                           # Function to create the 5 byte header for the packet
     header = (bit_6 & 0b111111) << 34
     header |= (bit_18 & 0b111111111111111111) << 16
     header |= bit_16 & 0b1111111111111111
     return header.to_bytes(5)
 
 
-def extract_bits_from_header(header):
+def extract_bits_from_header(header):                                               # Function to extract bits from my custom header
     header = int.from_bytes(header)
 
     bit_6 = (header >> 34) & 0b111111
@@ -87,7 +87,7 @@ def mistake_rate_check():                                                       
             print(f"Client: Mistake rate needs to be in range 0-100")               # Inform the user about the valid range
 
 
-def rounder(size):
+def rounder(size):                                                                  # Function to round numbers and determine their appropriate suffix (B, KB, MB, GB)
     endings = ["B", "KB", "MB", "GB"]
     index = 0
 

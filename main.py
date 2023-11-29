@@ -26,5 +26,3 @@ while True:
 
         switch_status = user.listen() if msg == "1" else user.request()     # Update the switch_status based on the action taken by the user
         msg = "2" if msg == "1" else "1"                                    # Switch the message between Client and Server
-
-# 169.254.95.251
