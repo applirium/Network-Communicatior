@@ -41,7 +41,7 @@ class Sender:
 
     def request(self):
         while True:
-            action = input("Client: Actions Client: Disconnect | Switch | Text | File: ").lower()
+            action = input("Client: Actions Client: [Disconnect, Switch, Text, File, Help]: ").lower()
 
             if action == "disconnect":                                              # Disconnecting client from server
                 self.sock.sendto(packet_construct(["FIN"]), self.receiver)          # Send FIN packet to signal disconnection to the receiver
@@ -158,8 +158,8 @@ class Sender:
                         continue
 
                     # Check received data for acknowledgments or errors for sent fragments
-                    seq_res, data_transfer_command = flag_check(data, ["DATA", "ACK"], ["INIT", "FIN", "ERROR"])
-                    seq_err, data_transfer_error = flag_check(data, ["DATA", "ACK", "ERROR"], ["INIT", "FIN"])
+                    seq_res, data_transfer_command = flag_check(data, ["DATA", "ACK"], ["INIT", "FIN", "NACK"])
+                    seq_err, data_transfer_error = flag_check(data, ["DATA", "ACK", "NACK"], ["INIT", "FIN"])
 
                     reminder = size % fragment_size
                     if reminder == 0:
@@ -177,21 +177,32 @@ class Sender:
                         print(f"Client: {'Text' if path == '' else 'File'} fragment {seq_err + 1} size: {reminder if seq_err + 1 == packet_transfer else fragment_size} B was fractured!")
 
                 self.sock.sendto(packet_construct(["DATA", "FIN"]), self.receiver)   # Send FIN packet to signal end of data transmission
-                data = self.sock.recv(MAX_FRAGMENT)
 
+                self.sock.settimeout(None)
+                data = self.sock.recv(MAX_FRAGMENT)
                 _, data_end_command = flag_check(data, ["DATA", "FIN", "ACK"])  # Checks for acknowledgment of the FIN packet
 
+                data = self.sock.recv(MAX_FRAGMENT)
+                _, switch_command = flag_check(data,["INIT", "FIN", "ACK"])  # Checks for acknowledgment of the FIN packet
+                self.sock.settimeout(5)
+
                 # If acknowledgment received, restarting a new thread for client keep alive mechanism
-                if data_end_command is not None:
+                if data_end_command is not None and switch_command is None:
                     self.thread_status = True
 
                     self.thread = threading.Thread(target=self.keep_alive)
                     self.thread.daemon = True
                     self.thread.start()
 
+                elif data_end_command is not None and switch_command is not None:
+                    self.sock.close()
+
+                    print(f"Client: Switching with server!")
+                    return self.port
+
             elif action == "switch":                                                # Handling action 'switch' to change the connection to another server
                 self.sock.sendto(packet_construct(["INIT", "FIN"]), self.receiver)
-                data = self.sock.recv(1024)
+                data = self.sock.recv(MAX_FRAGMENT)
 
                 _, end_command = flag_check(data, ["INIT", "FIN", "ACK"])
 
@@ -221,10 +232,10 @@ class Sender:
 
         while self.thread_status:                                                   # While the thread status is True (indicating the thread is active)
             try:
-                self.sock.sendto(packet_construct(["KEEP"]), self.receiver)         # Send a KEEP packet to check server response
+                self.sock.sendto(packet_construct(["ACK"]), self.receiver)          # Send a KEEP packet to check server response
                 data = self.sock.recv(MAX_FRAGMENT)
 
-                _, keep_request = flag_check(data, ["KEEP", "ACK"])            # Check for the acknowledgment of the KEEP packet
+                _, keep_request = flag_check(data, ["ACK", "NACK"])            # Check for the acknowledgment of the KEEP packet
 
                 if keep_request is not None:                                        # If an acknowledgment is received
                     not_responding = 0                                              # Reset the not_responding counter to 0

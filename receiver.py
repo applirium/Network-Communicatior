@@ -43,7 +43,7 @@ class Receiver:
 
                 # Check various flags in the received message
                 _, init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
-                _, keep_request = flag_check(message, ["KEEP"])
+                _, keep_request = flag_check(message, ["ACK"])
                 _, data_init_request = flag_check(message, ["DATA", "INIT"], ["FIN", "ACK"])
                 seq_data, data_transition_request = flag_check(message, ["DATA"], ["INIT", "FIN", "ACK"])
                 _, data_end_request = flag_check(message, ["DATA", "FIN"], ["INIT", "ACK"])
@@ -61,7 +61,7 @@ class Receiver:
                         self.connected = True
                         print(f"Server: Connection with client was successfully reestablished! {self.sender[0]}:{self.sender[1]}")
 
-                    self.sock.sendto(packet_construct(["KEEP", "ACK"]), self.sender)    # Respond to keep-alive request
+                    self.sock.sendto(packet_construct(["NACK", "ACK"]), self.sender)    # Respond to keep-alive request
                     print(f"Server: Client is alive! ")
 
                 elif data_init_request is not None:                                                 # Process INIT request for data transmission
@@ -89,12 +89,10 @@ class Receiver:
                         fragment_position.append(seq_data + 1)
                         success += 1
                     else:                                                                           # If CRC doesn't match, send an error acknowledgment
-                        self.sock.sendto(packet_construct(["DATA", "ACK", "ERROR"], sequence_number=seq_data), self.sender)
+                        self.sock.sendto(packet_construct(["DATA", "ACK", "NACK"], sequence_number=seq_data), self.sender)
                         fail += 1
 
                 elif data_end_request is not None:                                                  # Process END request for data transmission
-                    self.sock.sendto(packet_construct(["DATA", "FIN", "ACK"]), self.sender)
-
                     pair = sorted(list(zip(fragment_position, data)), key=lambda x: x[0])           # Process END request for data transmission
                     _, num = zip(*pair)
                     stop_time = time.time()
@@ -116,22 +114,41 @@ class Receiver:
                             file.writelines(num)
 
                         trans_size, ending = rounder(getsize(file_name))
-                        print(f"Server: Client sent file: {file_name} Size: {trans_size} {ending}")
+                        print(f"Server: Server accepted file: {file_name} Size: {trans_size} {ending}")
                         print(f"Server: Absolute path: {abspath(file_name)}")
 
                     transmission_time = stop_time - start_time              # If filename is provided, write the received data to a file
 
                     print(f"Server: Total fragments: {success} Fragments retransmitted: {fail}")
 
-                    if success + fail > 1:
+                    try:
                         speed, ending = rounder(size / transmission_time)
                         print(f"Server: Time of transmission: {round(transmission_time,5)} s Speed of transmission: {speed} {ending}/s")
+                    except ZeroDivisionError:
+                        continue
+                    finally:
+                        data = []                                               # Reset variables for next transmission
+                        fragment_position = []
+                        start_time = 0
+                        success = 0
+                        fail = 0
 
-                    data = []                                               # Reset variables for next transmission
-                    fragment_position = []
-                    start_time = 0
-                    success = 0
-                    fail = 0
+                    while True:
+                        inp = input("Server: Do yo want to switch [yes, no]: ").lower()
+                        if inp == "yes":
+                            self.sock.sendto(packet_construct(["DATA", "FIN", "ACK"]), self.sender)
+                            self.sock.sendto(packet_construct(["INIT", "FIN", "ACK"]), self.sender)
+                            print(f"Server: Switching with client")
+                            self.sock.close()
+
+                            return tuple((self.sender[0], self.port))
+
+                        elif inp == "no":
+                            self.sock.sendto(packet_construct(["DATA", "FIN", "ACK"]), self.sender)
+                            self.sock.sendto(packet_construct(["INIT", "FIN", "NACK"]), self.sender)
+                            break
+                        else:
+                            print("Sever: Invalid input")
 
                 elif switch_request is not None:                            # Handle request to switch connection
                     self.sock.sendto(packet_construct(["INIT", "FIN", "ACK"]), self.sender)

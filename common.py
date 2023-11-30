@@ -1,8 +1,8 @@
 import binascii
 
-FLAGS = {"FIN": 32, "KEEP": 16, "DATA": 8, "ERROR": 4, "ACK": 2, "INIT": 1}         # Dictionary to map flag names to their respective bit values
+FLAGS = {"FIN": 16, "DATA": 8, "NACK": 4, "ACK": 2, "INIT": 1}                      # Dictionary to map flag names to their respective bit values
 MAX_FRAGMENT = 1467                                                                 # Maximum fragment size
-MAX_FRAMES = 2**18
+MAX_FRAMES = 2**19
 HEADER_SIZE = 5                                                                     # Size of the header in bytes
 
 
@@ -13,9 +13,9 @@ def flag_creation(*args):                                                       
     return flag_sum
 
 
-def create_header(bit_6, bit_18, bit_16):                                           # Function to create the 5 byte header for the packet
-    header = (bit_6 & 0b111111) << 34
-    header |= (bit_18 & 0b111111111111111111) << 16
+def create_header(bit_5, bit_19, bit_16):                                           # Function to create the 5 byte header for the packet
+    header = (bit_5 & 0b111111) << 35
+    header |= (bit_19 & 0b1111111111111111111) << 16
     header |= bit_16 & 0b1111111111111111
     return header.to_bytes(5)
 
@@ -23,10 +23,10 @@ def create_header(bit_6, bit_18, bit_16):                                       
 def extract_bits_from_header(header):                                               # Function to extract bits from my custom header
     header = int.from_bytes(header)
 
-    bit_6 = (header >> 34) & 0b111111
-    bit_18 = (header >> 16) & 0b111111111111111111
+    bit_5 = (header >> 35) & 0b11111
+    bit_19 = (header >> 16) & 0b1111111111111111111
     bit_16 = header & 0b1111111111111111
-    return bit_6, bit_18, bit_16
+    return bit_5, bit_19, bit_16
 
 
 def packet_construct(flag, sequence_number=0, data=b"", error=False):               # Function to construct a packet with header containing flag, sequence number, and optional data
