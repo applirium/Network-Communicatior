@@ -1,4 +1,4 @@
-import os.path
+from os.path import exists, abspath, getsize
 import socket
 from common import flag_check, packet_construct, rounder, extract_bits_from_header, MAX_FRAGMENT, HEADER_SIZE
 import binascii
@@ -105,7 +105,7 @@ class Receiver:
 
                     else:                                       # If filename is provided, write the received data to a file
                         index = 1
-                        while os.path.exists(file_name):
+                        while exists(file_name):
                             if index == 1:
                                 file_name = file_name.replace(".", f"({index}).", 1)
                             else:
@@ -115,23 +115,23 @@ class Receiver:
                         with open(file_name, 'wb') as file:
                             file.writelines(num)
 
-                        print(f"Server: Client sent file: {file_name}")
+                        trans_size, ending = rounder(getsize(file_name))
+                        print(f"Server: Client sent file: {file_name} Size: {trans_size} {ending}")
+                        print(f"Server: Absolute path: {abspath(file_name)}")
 
                     transmission_time = stop_time - start_time              # If filename is provided, write the received data to a file
 
                     print(f"Server: Total fragments: {success} Fragments retransmitted: {fail}")
 
-                    try:
+                    if success + fail > 1:
                         speed, ending = rounder(size / transmission_time)
                         print(f"Server: Time of transmission: {round(transmission_time,5)} s Speed of transmission: {speed} {ending}/s")
-                    except ZeroDivisionError:
-                        continue
-                    finally:                                                # Reset variables for next transmission
-                        data = []
-                        fragment_position = []
-                        start_time = 0
-                        success = 0
-                        fail = 0
+
+                    data = []                                               # Reset variables for next transmission
+                    fragment_position = []
+                    start_time = 0
+                    success = 0
+                    fail = 0
 
                 elif switch_request is not None:                            # Handle request to switch connection
                     self.sock.sendto(packet_construct(["INIT", "FIN", "ACK"]), self.sender)

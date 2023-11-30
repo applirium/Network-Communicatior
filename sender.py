@@ -4,7 +4,7 @@ import socket
 import threading
 from common import flag_check, packet_construct, fragment_size_check, rounder, mistake_rate_check, MAX_FRAGMENT, MAX_FRAMES
 import time
-import os
+from os.path import getsize, abspath
 
 
 class Sender:
@@ -73,8 +73,8 @@ class Sender:
                             print(f"Client: Max file size = {max_file_size} {ending}")
 
                             path = input("Client: Set name of a file : ")
-                            absolute_path = os.path.abspath(path)
-                            size = os.path.getsize(path)
+                            absolute_path = abspath(path)
+                            size = getsize(path)
 
                             current_file_size, current_ending = rounder(size)
                             if size > fragment_size * MAX_FRAMES:                        # Check file size limit
@@ -206,6 +206,12 @@ class Sender:
             elif action == "end":                                                   # Handling action 'end' to terminate the program
                 return None
 
+            elif action == "help":
+                print("Input disconnect for disconnecting client from server")
+                print("Input switch for switching client with server")
+                print("Input text to send server text message")
+                print("Input file to send server file message")
+
             else:
                 print("Client: Invalid input")
 
@@ -227,7 +233,7 @@ class Sender:
             except (TimeoutError, ConnectionResetError):                            # Handle timeout or connection reset errors
                 not_responding += 1
                 if not_responding < 4:                                              # If the server hasn't responded for less than 4 consecutive times
-                    print(f"Client: Server is not responding! ")                    # Print a message indicating server unresponsiveness
+                    # print(f"Client: Server is not responding! ")                  # Print a message indicating server unresponsiveness
                     time.sleep(5)
                 else:                                                               # If the server hasn't responded for 4 consecutive times, return a connection interruption
                     print(f"Client: Connection was interrupted, press end to terminate program! ")
