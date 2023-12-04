@@ -43,11 +43,11 @@ class Receiver:
 
                 # Check various flags in the received message
                 _, init_request = flag_check(message, ["INIT"], ["FIN", "DATA", "ACK"])
-                _, keep_request = flag_check(message, ["ACK"])
+                _, keep_request = flag_check(message, ["ACK"], ["INIT", "DATA", "FIN"])
                 _, data_init_request = flag_check(message, ["DATA", "INIT"], ["FIN", "ACK"])
                 seq_data, data_transition_request = flag_check(message, ["DATA"], ["INIT", "FIN", "ACK"])
                 _, data_end_request = flag_check(message, ["DATA", "FIN"], ["INIT", "ACK"])
-                _, switch_request = flag_check(message, ["INIT", "FIN"])
+                _, switch_request = flag_check(message, ["INIT", "FIN"], ["DATA"])
                 _, end_request = flag_check(message, ["FIN"], ["INIT", "DATA", "ACK"])
 
                 # Handle different types of requests received
@@ -89,7 +89,7 @@ class Receiver:
                         fragment_position.append(seq_data + 1)
                         success += 1
                     else:                                                                           # If CRC doesn't match, send an error acknowledgment
-                        self.sock.sendto(packet_construct(["DATA", "ACK", "NACK"], sequence_number=seq_data), self.sender)
+                        self.sock.sendto(packet_construct(["DATA", "NACK"], sequence_number=seq_data), self.sender)
                         fail += 1
 
                 elif data_end_request is not None:                                                  # Process END request for data transmission

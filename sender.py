@@ -159,7 +159,7 @@ class Sender:
 
                     # Check received data for acknowledgments or errors for sent fragments
                     seq_res, data_transfer_command = flag_check(data, ["DATA", "ACK"], ["INIT", "FIN", "NACK"])
-                    seq_err, data_transfer_error = flag_check(data, ["DATA", "ACK", "NACK"], ["INIT", "FIN"])
+                    seq_err, data_transfer_error = flag_check(data, ["DATA", "NACK"], ["INIT", "FIN", "ACK"])
 
                     reminder = size % fragment_size
                     if reminder == 0:
@@ -183,7 +183,7 @@ class Sender:
                 _, data_end_command = flag_check(data, ["DATA", "FIN", "ACK"])  # Checks for acknowledgment of the FIN packet
 
                 data = self.sock.recv(MAX_FRAGMENT)
-                _, switch_command = flag_check(data,["INIT", "FIN", "ACK"])  # Checks for acknowledgment of the FIN packet
+                _, switch_command = flag_check(data, ["INIT", "FIN", "ACK"])  # Checks for acknowledgment of the SWITCH packet
                 self.sock.settimeout(5)
 
                 # If acknowledgment received, restarting a new thread for client keep alive mechanism
@@ -244,7 +244,7 @@ class Sender:
             except (TimeoutError, ConnectionResetError):                            # Handle timeout or connection reset errors
                 not_responding += 1
                 if not_responding < 4:                                              # If the server hasn't responded for less than 4 consecutive times
-                    # print(f"Client: Server is not responding! ")                  # Print a message indicating server unresponsiveness
+                    print(f"Client: Server is not responding! ")                  # Print a message indicating server unresponsiveness
                     time.sleep(5)
                 else:                                                               # If the server hasn't responded for 4 consecutive times, return a connection interruption
                     print(f"Client: Connection was interrupted, press end to terminate program! ")
