@@ -1,6 +1,6 @@
 import time
-from receiver import Receiver
-from sender import Sender
+from clients.receiver import Receiver
+from clients.sender import Sender
 
 while True:
     msg = input("Client (1) Server (2) End of program (3): ")
